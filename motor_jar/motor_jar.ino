@@ -46,13 +46,21 @@ float lastHum = -999.0;
 #define M4_IN3 32
 #define M4_IN4 27 
 #define M4_ENB 14 
+// Motor 5 (BARU)
+#define M5_ENA 23
+#define M5_IN1 22
+#define M5_IN2 13
+// Motor 6 (BARU)
+#define M6_IN3 12
+#define M6_IN4 16
+#define M6_ENB 17
 
 // Konfigurasi PWM
 const int freq = 1000;
 const int resolution = 8; // 0-255
 
 // Variabel Speed Motor
-int speed1 = 0, speed2 = 0, speed3 = 0, speed4 = 0;
+int speed1 = 0, speed2 = 0, speed3 = 0, speed4 = 0, speed5 = 0, speed6 = 0;
 
 // ================= OBJEK CLIENT =================
 WiFiClient espClient;
@@ -67,6 +75,9 @@ void setup() {
   pinMode(M2_IN3, OUTPUT); pinMode(M2_IN4, OUTPUT);
   pinMode(M3_IN1, OUTPUT); pinMode(M3_IN2, OUTPUT);
   pinMode(M4_IN3, OUTPUT); pinMode(M4_IN4, OUTPUT);
+  // Setup Pin Motor 5 & 6
+  pinMode(M5_IN1, OUTPUT); pinMode(M5_IN2, OUTPUT);
+  pinMode(M6_IN3, OUTPUT); pinMode(M6_IN4, OUTPUT);
 
   // 2. Setup PWM Motor
   // Menggunakan API ESP32 Core v3.0+. Jika error, lihat komentar di bawah.
@@ -74,13 +85,17 @@ void setup() {
   ledcAttach(M2_ENB, freq, resolution);
   ledcAttach(M3_ENA, freq, resolution);
   ledcAttach(M4_ENB, freq, resolution);
+  ledcAttach(M5_ENA, freq, resolution);
+  ledcAttach(M6_ENB, freq, resolution);
   
-  /* CATATAN: Jika menggunakan ESP32 Core v2.x dan error 'ledcAttach':
-     Gunakan kode lama ini:
+  /* CATATAN: Jika menggunakan ESP32 Core v2.x (lama) dan error 'ledcAttach':
+     Gunakan kode ini:
      ledcSetup(0, freq, resolution); ledcAttachPin(M1_ENA, 0);
      ledcSetup(1, freq, resolution); ledcAttachPin(M2_ENB, 1);
      ledcSetup(2, freq, resolution); ledcAttachPin(M3_ENA, 2);
      ledcSetup(3, freq, resolution); ledcAttachPin(M4_ENB, 3);
+     ledcSetup(4, freq, resolution); ledcAttachPin(M5_ENA, 4);
+     ledcSetup(5, freq, resolution); ledcAttachPin(M6_ENB, 5);
   */
 
   // 3. Setup Sensor DHT
@@ -116,7 +131,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   
   // Debugging pesan masuk
-  Serial.print("Pesan masuk ["); Serial.print(topic); Serial.print("]: "); Serial.println(message);
+  // Serial.print("Pesan masuk ["); Serial.print(topic); Serial.print("]: "); Serial.println(message);
 
   String topicStr = String(topic);
   int motorId = 0;
@@ -126,6 +141,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
   else if (topicStr.indexOf("mixer2") >= 0) motorId = 2;
   else if (topicStr.indexOf("mixer3") >= 0) motorId = 3;
   else if (topicStr.indexOf("mixer4") >= 0) motorId = 4;
+  else if (topicStr.indexOf("mixer5") >= 0) motorId = 5;
+  else if (topicStr.indexOf("mixer6") >= 0) motorId = 6;
 
   if (motorId > 0) {
     int currentSpeed = 0;
@@ -133,6 +150,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (motorId == 2) currentSpeed = speed2;
     if (motorId == 3) currentSpeed = speed3;
     if (motorId == 4) currentSpeed = speed4;
+    if (motorId == 5) currentSpeed = speed5;
+    if (motorId == 6) currentSpeed = speed6;
 
     // Jika perintah ON/OFF
     if (topicStr.endsWith("cmd")) {
@@ -165,6 +184,8 @@ void controlMotor(int motorId, int speed) {
     case 2: pin1 = M2_IN3; pin2 = M2_IN4; pinPWM = M2_ENB; break;
     case 3: pin1 = M3_IN1; pin2 = M3_IN2; pinPWM = M3_ENA; break;
     case 4: pin1 = M4_IN3; pin2 = M4_IN4; pinPWM = M4_ENB; break;
+    case 5: pin1 = M5_IN1; pin2 = M5_IN2; pinPWM = M5_ENA; break;
+    case 6: pin1 = M6_IN3; pin2 = M6_IN4; pinPWM = M6_ENB; break;
     default: return;
   }
 
@@ -172,7 +193,7 @@ void controlMotor(int motorId, int speed) {
   // Jika Core v2.x: ganti ledcWrite(pinPWM, speed) dengan ledcWrite(channel, speed)
   ledcWrite(pinPWM, speed); 
 
-  // Atur Arah (Default CW)
+  // Atur Arah (Default CW - Searah Jarum Jam)
   if (speed == 0) {
     digitalWrite(pin1, LOW); digitalWrite(pin2, LOW);
   } else {
@@ -185,6 +206,8 @@ void updateSpeedVar(int id, int val) {
   if (id == 2) speed2 = val;
   if (id == 3) speed3 = val;
   if (id == 4) speed4 = val;
+  if (id == 5) speed5 = val;
+  if (id == 6) speed6 = val;
 }
 
 // ================= KONEKSI ULANG (RECONNECT) =================
@@ -197,11 +220,12 @@ void reconnect() {
       Serial.println("Terhubung!");
       
       // === SUBSCRIBE TOPIC MOTOR ===
-      // Wajib subscribe lagi setelah reconnect agar bisa menerima perintah
       client.subscribe("mixer1/cmd"); client.subscribe("mixer1/speed");
       client.subscribe("mixer2/cmd"); client.subscribe("mixer2/speed");
       client.subscribe("mixer3/cmd"); client.subscribe("mixer3/speed");
       client.subscribe("mixer4/cmd"); client.subscribe("mixer4/speed");
+      client.subscribe("mixer5/cmd"); client.subscribe("mixer5/speed");
+      client.subscribe("mixer6/cmd"); client.subscribe("mixer6/speed");
       
     } else {
       Serial.print("Gagal, rc="); Serial.print(client.state());
@@ -230,8 +254,6 @@ void loop() {
     if (isnan(h) || isnan(t)) {
       Serial.println("Gagal membaca sensor DHT!");
     } else {
-      // Kirim jika ada perubahan (atau kirim berkala - logika di bawah mengirim berkala setiap interval)
-      
       // Kirim Suhu
       String tempStr = String(t, 1); // 1 desimal
       Serial.print("Suhu: "); Serial.print(tempStr); Serial.println(" C");
